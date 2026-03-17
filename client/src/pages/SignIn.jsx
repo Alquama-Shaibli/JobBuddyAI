@@ -20,10 +20,10 @@ const SignIn = () => {
                 <h2 className='mb-2 sm:text-xl font-bold'>Welcome to Job Buddy</h2>
                 <hr className='text-gray-200 mb-4' />
                 <form action="">
-                    <div className="">
+                    {/* <div className="">
                         <label htmlFor="username">Name</label>
                         <input type='text' id='username' name='username' className='border-2 border-gray-400 m-3 rounded-sm w-full p-1 py-2' placeholder='Enter your name...' />
-                    </div>
+                    </div> */}
 
                     <div className="">
                         <label htmlFor="email">Email</label>
