@@ -3,7 +3,7 @@ import bcryptjs from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 
 export const registerUser = async (req, res, next) =>{
-    const { username, email, password, skills, experience, preferredRole, location, resume } = req.body;
+    const { username, email, password } = req.body;
 
     // validation
     if(!username || !password || !email || username =='' || password =='' || email ==''){
@@ -25,11 +25,6 @@ export const registerUser = async (req, res, next) =>{
             username,
             email,
             password: hashedPassword,
-            skills,
-            experience,
-            preferredRole,
-            location,
-            resume
         });
 
         // save user

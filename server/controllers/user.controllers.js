@@ -22,7 +22,8 @@ export const profileUpdate = async(req,res,next)=>{
             {
                 $set: updateData
             },
-            {new : true }
+            // {new : true }  //oldre version to get updated document after updated data ( will depereciated soon it is still valid with small warnings)
+            {returnDocument: "after"} //newer version to get updated document after updated data
         )
 
         res.status(201).json({
