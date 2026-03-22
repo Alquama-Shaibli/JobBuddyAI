@@ -1,4 +1,5 @@
 import Job from "../models/job.model.js";
+import User from "../models/user.model.js"
 
 // Admin Job Posting
 export const createJob = async (req, res, next)=>{
@@ -40,7 +41,7 @@ export const createJob = async (req, res, next)=>{
 export const getAllJobs = async (req, res, next)=>{
     const {keyword, location, skills, experience, salary} = req.query;
     // validation
-    if(!req.user.id){
+    if(!req.user){
         return next({statusCode: 401, message: "You are not authorized"})
     };
     console.log(keyword);
@@ -87,6 +88,46 @@ export const getAllJobs = async (req, res, next)=>{
             jobs
         });
 
+    } catch (error) {
+        next(error)
+    }
+};
+
+export const skillMatching = async (req, res, next)=>{
+    try {
+        const user = await User.findById(req.user.id);
+        const jobs = await Job.find();
+
+        const userSkills = user.skills.map(skill => skill.toLowerCase());
+
+        const matchedJobs = jobs.map(job=>{
+            const requiredSkills = job.skillsRequired.map(skill => skill.toLowerCase());
+
+            let matchCount = 0;
+            let missingSkills = [];
+
+            requiredSkills.forEach(skill => {
+                if(userSkills.includes(skill)){
+                    matchCount++;
+                }else{
+                    missingSkills.push(skill)
+                };
+            });
+
+            const matchPercentage = Math.round(
+                (matchCount / requiredSkills.length) * 100
+            );
+
+            return {
+                ...job._doc,
+                matchPercentage,
+                missingSkills
+            };
+        });
+
+        matchedJobs.sort((a,b)=> b.matchPercentage - a.matchPercentage);
+
+        res.status(200).json(matchedJobs);
     } catch (error) {
         next(error)
     }
