@@ -1,17 +1,20 @@
-import User from "../models/User.model.js";
+import User from "../models/user.model.js";
 import bcryptjs from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 
 export const registerUser = async (req, res, next) =>{
-    const { username, email, password } = req.body;
+    const { username, email, password, isAdmin } = req.body;
 
     // validation
     if(!username || !password || !email || username =='' || password =='' || email ==''){
         return next({statusCode:400, message:'please provide all required fields'})
     }
 
+    // normalize email
+    const normalizedEmail = email.trim().toLowerCase();
+
     // is user already existed
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ email: normalizedEmail });
     if(user){
         return next({statusCode: 400, message: 'Email already existed'}) // if it is not return then then code will proceed further 
     }
@@ -23,8 +26,9 @@ export const registerUser = async (req, res, next) =>{
         // new user created
         const newUser = new User({
             username,
-            email,
+            email: normalizedEmail,
             password: hashedPassword,
+            isAdmin
         });
 
         // save user
