@@ -18,6 +18,10 @@ const userSchema = new mongoose.Schema({
         required: [true, 'password is required'],
 
     },
+    profilePicture: {
+        type: String,
+        default: 'https://www.pngmart.com/files/23/Profile-PNG-Photo.png'
+    },
     skills: {
         type: [String],
         default: [],

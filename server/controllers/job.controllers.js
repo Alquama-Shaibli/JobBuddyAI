@@ -80,7 +80,7 @@ export const getAllJobs = async (req, res, next)=>{
                             .populate("postedBy", "username email",)
                             .sort({ createdAt: -1 });
 
-        console.log(query);
+        // console.log(query);
 
         res.status(200).json({
             success: true,
