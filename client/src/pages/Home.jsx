@@ -1,7 +1,8 @@
 import React from 'react'
+import ChatBot from '../components/ChatBot'
 
 export const Home = () => {
   return (
-    <div>Home</div>
+    <div><ChatBot /></div>
   )
 }
