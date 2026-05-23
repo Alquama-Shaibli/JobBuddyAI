@@ -1,5 +1,6 @@
+// import dotenv from 'dotenv'
+import './config/env.js';
 import express from 'express';
-import dotenv from 'dotenv'
 import cookieParser from 'cookie-parser';
 import cors from 'cors'
 
@@ -11,9 +12,12 @@ import userRoutes from './routes/user.routes.js';
 import jobRoutes from './routes/job.routes.js';
 import mockTestRoutes from './routes/mockTest.routes.js';
 import resultRoutes from './routes/result.routes.js';
+import chatRoutes from './routes/chat.routes.js'
 
-// config dotenv
-dotenv.config()
+// // config dotenv
+// dotenv.config({
+//   path: './.env'
+// })
 
 // config db
 connectDb()
@@ -41,6 +45,7 @@ app.use('/api/v1/user', userRoutes);
 app.use('/api/v1/jobs', jobRoutes);
 app.use('/api/v1/mock-test', mockTestRoutes);
 app.use('/api/v1/result', resultRoutes);
+app.use('/api/v1/ai', chatRoutes);
 
 // error handler middleware
 app.use(errorHandler)
