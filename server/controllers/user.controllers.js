@@ -1,7 +1,7 @@
 import User from "../models/user.model.js";
 
 export const profileUpdate = async(req,res,next)=>{
-    const { skills, experience, preferredRole, location } = req.body;
+    const { skills, experience, preferredRole, location, education, phone, bio, github, portfolio } = req.body;
 
     // validation
     if(req.user.id !== req.params.userId){
@@ -9,13 +9,23 @@ export const profileUpdate = async(req,res,next)=>{
     }
 
     const updateData = {};
-    if(skills && skills.length >0) updateData.skills = skills;
+    if (Array.isArray(skills) && skills.length > 0) {
+        updateData.skills = skills;
+    }
 
     if(experience !== undefined && experience >= 0) updateData.experience = experience;
 
     if(preferredRole !== undefined && preferredRole.trim() !=='') updateData.preferredRole = preferredRole;
+
+    if(education !== undefined && education.trim() !=='') updateData.education = education;
+    if(bio !== undefined && bio.trim() !=='') updateData.bio = bio;
+    if(github !== undefined && github.trim() !=='') updateData.github = github;
+    if(portfolio !== undefined && portfolio.trim() !=='') updateData.portfolio = portfolio;
+    if(phone !== undefined && phone.trim() !=='') updateData.phone = phone;
     
-    if(typeof location === "string" && location !== undefined && location.trim() !== '') updateData.location = location;
+    if (location !== undefined && typeof location === "string" && location.trim() !== '') {
+        updateData.location = location;
+    }
 
     try {
         const user = await User.findByIdAndUpdate(req.user.id,
@@ -44,5 +54,29 @@ export const profileUpdate = async(req,res,next)=>{
         })
     } catch (error) {
         next(error)
+    }
+};
+
+export const getProfile = async (req, res, next) => {
+
+    try {
+
+        const user = await User.findById(req.user.id)
+            .select("-password");
+
+        if(!user) {
+            return next({
+                statusCode: 404,
+                message: "User not found"
+            });
+        }
+
+        res.status(200).json({
+            success: true,
+            user
+        });
+
+    } catch (error) {
+        next(error);
     }
 };

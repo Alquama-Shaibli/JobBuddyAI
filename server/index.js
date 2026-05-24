@@ -12,7 +12,8 @@ import userRoutes from './routes/user.routes.js';
 import jobRoutes from './routes/job.routes.js';
 import mockTestRoutes from './routes/mockTest.routes.js';
 import resultRoutes from './routes/result.routes.js';
-import chatRoutes from './routes/chat.routes.js'
+import chatRoutes from './routes/chat.routes.js';
+import resumeRoutes from './routes/resume.routes.js'
 
 // // config dotenv
 // dotenv.config({
@@ -46,6 +47,7 @@ app.use('/api/v1/jobs', jobRoutes);
 app.use('/api/v1/mock-test', mockTestRoutes);
 app.use('/api/v1/result', resultRoutes);
 app.use('/api/v1/ai', chatRoutes);
+app.use('/api/v1/resume', resumeRoutes);
 
 // error handler middleware
 app.use(errorHandler)

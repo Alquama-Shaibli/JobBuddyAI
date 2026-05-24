@@ -27,6 +27,18 @@ const userSchema = new mongoose.Schema({
         default: [],
         index: true
     },
+    education: {
+        type: String,
+        default: '',
+    },
+    phone: {
+        type: String,
+        default: '',
+    },
+    bio: {
+        type: String,
+        default: '',
+    },
     experience:{
         type: Number,
         default: 0
@@ -40,6 +52,14 @@ const userSchema = new mongoose.Schema({
         default: ''
     },
     resume:{
+        type: String,
+        default: ''
+    },
+    github: {
+        type: String,
+        default: ''
+    },
+    portfolio: {
         type: String,
         default: ''
     },
