@@ -64,13 +64,13 @@ export const loginUser = async(req, res, next)=> {
         };
 
         // generate token
-        const token = jwt.sign({ id: validUser._id, isAdmin: validUser.isAdmin}, process.env.SECRET)
+        const token = jwt.sign({ id: validUser._id, isAdmin: validUser.isAdmin}, process.env.SECRET, { expiresIn: '7d'})
 
         // sanitized user data and remove password using destructure
         const { password: pass, ...rest} = validUser._doc;
 
         // sending rest data and saving cookie in frontend
-        res.status(200).cookie('access_token', token, {httpOnly: true}).json(({
+        res.status(200).cookie('access_token', token, {httpOnly: true, maxAge: 7 * 24 * 60 * 60 * 1000}).json(({
             success: true,
             user: rest
         }))
