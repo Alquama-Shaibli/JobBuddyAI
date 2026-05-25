@@ -54,7 +54,7 @@ app.use('/api/v1/interview', interviewRoutes);
 // error handler middleware
 app.use(errorHandler)
 
-app.listen(PORT, ()=>{
-    console.log(`Server is connected on http://localhost:${PORT}`.bgCyan.white);
-})
+app.listen(PORT, "0.0.0.0", () => {
+    console.log(`Server running on port ${PORT}`);
+});
 
