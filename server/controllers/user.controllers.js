@@ -1,4 +1,4 @@
-import User from "../models/user.model.js";
+import User from "../models/user.models.js";
 
 export const profileUpdate = async(req,res,next)=>{
     const { skills, experience, preferredRole, location, education, phone, bio, github, portfolio } = req.body;

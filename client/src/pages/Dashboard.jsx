@@ -154,8 +154,7 @@ const Dashboard = () => {
           {/* MOCK Interview History */}
 
           {/* MOCK INTERVIEW */}
-          <Link
-            to="/interview"
+          <div
             className="rounded-3xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-8 hover:border-blue-500 transition"
           >
             <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-3">
@@ -167,10 +166,10 @@ const Dashboard = () => {
             </p>
 
             <div className="flex items-center justify-between text-blue-600 font-semibold">
-              <div className="flex items-center gap-2">
+              <Link to={'/interview'} className="flex items-center gap-2">
                 Start Interview
                 <FiArrowRight />
-              </div>
+              </Link>
               <div className="">
                 <Link
                   to="/interview-history"
@@ -180,7 +179,7 @@ const Dashboard = () => {
                 </Link>
               </div>
             </div>
-          </Link>
+          </div>
 
           <Link
             to="/ai-chat"
