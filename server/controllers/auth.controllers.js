@@ -28,7 +28,7 @@ export const registerUser = async (req, res, next) =>{
             username,
             email: normalizedEmail,
             password: hashedPassword,
-            isAdmin
+            isAdmin: req.body.isAdmin
         });
 
         // save user
@@ -70,10 +70,13 @@ export const loginUser = async(req, res, next)=> {
         const { password: pass, ...rest} = validUser._doc;
 
         // sending rest data and saving cookie in frontend
-        res.status(200).cookie('access_token', token, {httpOnly: true, maxAge: 7 * 24 * 60 * 60 * 1000}).json(({
-            success: true,
-            user: rest
-        }))
+        res.status(200).cookie('access_token', token, 
+            {
+                httpOnly: true,
+                secure: true,
+                sameSite: "none",
+                maxAge: 7 * 24 * 60 * 60 * 1000}).json(({
+            success: true, user: rest}))
         
     } catch (error) {
         next(error)
