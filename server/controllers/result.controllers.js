@@ -55,3 +55,51 @@ export const getResultById = async (req, res, next) => {
         next(error);
     }
 };
+
+export const getResultsAnalytics = async (req, res, next) => {
+
+    try {
+
+        const results = await Result.find({
+            userId: req.user.id
+        });
+
+        const totalTests = results.length;
+
+        const totalScore = results.reduce(
+            (acc, curr) => acc + curr.score,
+            0
+        );
+
+        const totalQuestions = results.reduce(
+            (acc, curr) => acc + curr.totalQuestion,
+            0
+        );
+
+        const averageScore = totalTests
+            ? (totalScore / totalTests).toFixed(1)
+            : 0;
+
+        const percentage = totalQuestions
+            ? ((totalScore / totalQuestions) * 100).toFixed(1)
+            : 0;
+
+        const highestScore = results.length
+            ? Math.max(...results.map(r => r.score))
+            : 0;
+
+        res.status(200).json({
+            success: true,
+            analytics: {
+                totalTests,
+                averageScore,
+                highestScore,
+                percentage
+            }
+        });
+
+    } catch (error) {
+
+        next(error);
+    }
+};

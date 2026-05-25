@@ -4,20 +4,20 @@ const resultSchema = new mongoose.Schema({
     userId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "User",
-        require: true
+        required: true
     },
     testId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "MockTest",
-        require: true
+        required: true
     },
     score: {
         type: Number,
-        require: true
+        required: true
     },
     totalQuestion: {
         type: Number,
-        require: true
+        required: true
     },
     answers: [
         {
