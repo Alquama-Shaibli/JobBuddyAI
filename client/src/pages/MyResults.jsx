@@ -58,7 +58,7 @@ const MyResults = () => {
 
         return (
 
-            <div className='min-h-screen flex items-center justify-center bg-gray-50 dark:bg-[#0f172a]'>
+            <div className='min-h-screen flex items-center justify-center'>
 
                 <FiLoader className='animate-spin text-4xl text-blue-600' />
 
@@ -68,7 +68,7 @@ const MyResults = () => {
 
     return (
 
-        <div className='min-h-screen bg-gray-50 dark:bg-[#0f172a] px-4 py-10'>
+        <div className='min-h-screen px-4 py-10'>
 
             <div className='max-w-7xl mx-auto'>
 

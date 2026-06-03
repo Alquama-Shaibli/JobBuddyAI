@@ -1,18 +1,21 @@
-import jwt from 'jsonwebtoken'
+import jwt from 'jsonwebtoken';
+import logger from '../utils/logger.js';
 
-const verifyToken = async(req, res, next)=>{
+const verifyToken = (req, res, next) => {
     const token = req.cookies.access_token;
 
-    if(!token){
-        return next({statusCode: 401, message:'Token not found. Please login'})
+    if (!token) {
+        return res.status(401).json({ success: false, message: 'No token provided. Please log in.' });
     }
+
     try {
-        const decoded = jwt.verify(token, process.env.SECRET);
-        req.user = decoded //attach user to request
-        next()
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        req.user = decoded;
+        next();
     } catch (error) {
-        next(error)
+        logger.warn(`Invalid token attempt from ${req.ip}`);
+        return res.status(401).json({ success: false, message: 'Invalid or expired token. Please log in again.' });
     }
-}
+};
 
 export default verifyToken;

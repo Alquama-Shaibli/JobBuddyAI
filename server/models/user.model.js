@@ -1,22 +1,20 @@
 import mongoose from "mongoose";
 
 const userSchema = new mongoose.Schema({
-    username:{
+    username: {
         type: String,
         required: true,
         trim: true
     },
-    email:{
+    email: {
         type: String,
-        unique: true,
         required: true,
         lowercase: true,
         trim: true,
     },
-    password:{
+    password: {
         type: String,
         required: [true, 'password is required'],
-
     },
     profilePicture: {
         type: String,
@@ -25,7 +23,6 @@ const userSchema = new mongoose.Schema({
     skills: {
         type: [String],
         default: [],
-        index: true
     },
     education: {
         type: String,
@@ -39,19 +36,19 @@ const userSchema = new mongoose.Schema({
         type: String,
         default: '',
     },
-    experience:{
+    experience: {
         type: Number,
         default: 0
     },
-    preferredRole:{
+    preferredRole: {
         type: String,
         default: ''
     },
-    location:{
+    location: {
         type: String,
         default: ''
     },
-    resume:{
+    resume: {
         type: String,
         default: ''
     },
@@ -63,11 +60,29 @@ const userSchema = new mongoose.Schema({
         type: String,
         default: ''
     },
-    isAdmin:{
+    isAdmin: {
         type: Boolean,
         default: false
+    },
+    isOnboarded: {
+        type: Boolean,
+        default: false
+    },
+    languages: {
+        type: [String],
+        default: []
+    },
+    resumeUrl: {
+        type: String,
+        default: ''
     }
 }, { timestamps: true });
+
+// Indexes for performance
+userSchema.index({ email: 1 }, { unique: true });
+userSchema.index({ skills: 1 });
+userSchema.index({ createdAt: -1 });
+userSchema.index({ isAdmin: 1 });
 
 const User = mongoose.models.User || mongoose.model('User', userSchema);
 

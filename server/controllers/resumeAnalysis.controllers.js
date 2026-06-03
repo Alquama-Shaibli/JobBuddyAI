@@ -51,6 +51,12 @@ export const analyzeResume = async (req, res, next) => {
             "Add measurable achievements",
             "Improve project descriptions"
           ],
+          "section_recommendations": [
+            {
+              "section": "Experience",
+              "recommendation": "Quantify your impact with metrics (e.g., increased performance by 20%)."
+            }
+          ],
           "resume_summary": "Good resume for MERN developer fresher."
         }
         `;

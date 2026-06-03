@@ -1,84 +1,100 @@
 import User from "../models/user.model.js";
 import bcryptjs from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import { registerSchema, loginSchema } from "../validators/auth.validators.js";
+import logger from "../utils/logger.js";
 
-export const registerUser = async (req, res, next) =>{
-    const { username, email, password } = req.body;
-
-    // validation
-    if(!username || !password || !email || username =='' || password =='' || email ==''){
-        return next({statusCode:400, message:'please provide all required fields'})
+export const registerUser = async (req, res, next) => {
+    // Zod validation
+    const parsed = registerSchema.safeParse(req.body);
+    if (!parsed.success) {
+        return res.status(400).json({
+            success: false,
+            message: 'Validation failed',
+            errors: parsed.error.errors.map(e => ({ field: e.path.join('.'), message: e.message }))
+        });
     }
 
-    // normalize email
+    const { username, email, password } = parsed.data;
     const normalizedEmail = email.trim().toLowerCase();
 
-    // is user already existed
-    const user = await User.findOne({ email: normalizedEmail });
-    if(user){
-        return next({statusCode: 400, message: 'Email already existed'}) // if it is not return then then code will proceed further 
-    }
-
     try {
-        // hash password
-        const hashedPassword = await bcryptjs.hash(password, 10);
-        
-        // new user created
-        const newUser = new User({
-            username,
+        const existingUser = await User.findOne({ email: normalizedEmail }).lean();
+        if (existingUser) {
+            return res.status(400).json({ success: false, message: 'Email already registered' });
+        }
+
+        const hashedPassword = await bcryptjs.hash(password, 12);
+
+        // SECURITY: isAdmin is always forced to false — never from request body
+        const newUser = await User.create({
+            username: username.trim(),
             email: normalizedEmail,
             password: hashedPassword,
-            isAdmin: req.body.isAdmin
+            isAdmin: false,
         });
 
-        // save user
-        await newUser.save();
+        logger.info(`New user registered: ${normalizedEmail}`);
 
         res.status(201).json({
-            message: `Account created Successfully for ${username}`,
-            success: true
-        })
+            success: true,
+            message: `Account created successfully for ${username}`
+        });
     } catch (error) {
-        next(error)
+        next(error);
     }
 };
 
-export const loginUser = async(req, res, next)=> {
-    const { email, password } = req.body;
+export const loginUser = async (req, res, next) => {
+    const parsed = loginSchema.safeParse(req.body);
+    if (!parsed.success) {
+        return res.status(400).json({
+            success: false,
+            message: 'Validation failed',
+            errors: parsed.error.errors.map(e => ({ field: e.path.join('.'), message: e.message }))
+        });
+    }
 
-    // validation
-    if(!email || !password || email=='' || password==''){
-        return next({statusCode: 400, message:'please provide all required fields'})
-    };
+    const { email, password } = parsed.data;
 
     try {
-        const validUser = await User.findOne({ email });
-        if(!validUser){
-            return next({ statusCode: 404, message: 'user not found' });
-        };
-        
-        // valid password
+        const validUser = await User.findOne({ email: email.trim().toLowerCase() });
+        if (!validUser) {
+            logger.warn(`Failed login attempt for: ${email}`);
+            return res.status(401).json({ success: false, message: 'Invalid email or password' });
+        }
+
         const validPassword = await bcryptjs.compare(password, validUser.password);
-        if(!validPassword){
-            return next({statusCode: 401, message:'Invalid password or email'});
-        };
+        if (!validPassword) {
+            logger.warn(`Invalid password attempt for: ${email}`);
+            return res.status(401).json({ success: false, message: 'Invalid email or password' });
+        }
 
-        // generate token
-        const token = jwt.sign({ id: validUser._id, isAdmin: validUser.isAdmin}, process.env.SECRET, { expiresIn: '7d'})
+        const token = jwt.sign(
+            { id: validUser._id, isAdmin: validUser.isAdmin },
+            process.env.JWT_SECRET,
+            { expiresIn: '7d' }
+        );
 
-        // sanitized user data and remove password using destructure
-        const { password: pass, ...rest} = validUser._doc;
+        const { password: _pass, ...rest } = validUser._doc;
 
-        // sending rest data and saving cookie in frontend
-        res.status(200).cookie('access_token', token, 
-            {
+        const isProd = process.env.NODE_ENV === 'production';
+
+        res.status(200)
+            .cookie('access_token', token, {
                 httpOnly: true,
-                secure: true,
-                sameSite: "none",
-                maxAge: 7 * 24 * 60 * 60 * 1000}).json(({
-            success: true, user: rest}))
-        
+                secure: isProd,
+                sameSite: isProd ? 'none' : 'lax',
+                maxAge: 7 * 24 * 60 * 60 * 1000
+            })
+            .json({ success: true, user: rest });
+
+        logger.info(`User logged in: ${email}`);
     } catch (error) {
-        next(error)
+        next(error);
     }
+};
+
+export const logoutUser = async (req, res) => {
+    res.clearCookie('access_token').json({ success: true, message: 'Logged out successfully' });
 };

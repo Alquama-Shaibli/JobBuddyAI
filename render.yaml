@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: jobbuddy-ai
+    env: node
+    region: singapore
+    plan: free
+    # rootDir is the REPO ROOT — Render runs buildCommand from here
+    buildCommand: npm run build:full
+    startCommand: npm run start:prod
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 8080
+      - key: MONGO_URI
+        sync: false
+      - key: DB_NAME
+        value: jobbuddy
+      - key: JWT_SECRET
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: LOG_LEVEL
+        value: info
+      # ALLOWED_ORIGINS not needed — frontend & API are on same origin

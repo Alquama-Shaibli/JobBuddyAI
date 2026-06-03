@@ -57,7 +57,7 @@ const InterviewHistory = () => {
 
         return (
 
-            <div className='min-h-screen flex items-center justify-center bg-gray-50 dark:bg-[#0f172a]'>
+            <div className='min-h-screen flex items-center justify-center'>
 
                 <div className='text-xl text-gray-600 dark:text-gray-300'>
                     Loading interviews...
@@ -69,7 +69,7 @@ const InterviewHistory = () => {
 
     return (
 
-        <div className='min-h-screen bg-gray-50 dark:bg-[#0f172a] py-10 px-4'>
+        <div className='min-h-screen py-10 px-4'>
 
             <div className='max-w-7xl mx-auto'>
 

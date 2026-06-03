@@ -1,255 +1,124 @@
 import model from "../config/gemini.js";
 import Resume from "../models/resume.model.js";
 import Interview from "../models/interview.model.js";
+import logger from "../utils/logger.js";
 
+const VALID_TYPES = ['HR', 'DSA', 'MERN', 'RESUME'];
+
+const buildPrompt = (type, resumeText) => {
+    const base = `Generate exactly 25 ${type} interview questions structured by difficulty: 10 Basic, 10 Medium, 5 Advanced.
+Return ONLY valid JSON array:
+[{ "type": "technical", "question": "Question text here" }]`;
+
+    if (type === 'RESUME') {
+        return `Based on this resume:\n${resumeText || 'No resume provided'}\n\n${base}`;
+    }
+    const labels = { HR: 'HR', DSA: 'DSA (Data Structures & Algorithms)', MERN: 'MERN stack' };
+    return `Generate exactly 25 ${labels[type]} interview questions.\n${base}`;
+};
 
 export const generateQuestions = async (req, res, next) => {
     try {
-
         const { type } = req.body;
-        // console.log(type);
-        const resume = await Resume.findOne({
-            userId: req.user.id
-        });
 
-        const resumeText = resume?.extractedText;
-
-        let prompt = "";
-
-        if (type === "HR") {
-            prompt = `
-            Generate 5 HR interview questions
-            for a software engineer.
-
-            Return ONLY valid JSON like this:
-
-                [
-                {
-                "type":"technical",
-                "question":"Explain JWT authentication."
-                }
-                ]
-            `;
+        if (!type || !VALID_TYPES.includes(type)) {
+            return res.status(400).json({
+                success: false,
+                message: `type must be one of: ${VALID_TYPES.join(', ')}`
+            });
         }
 
-        if (type === "DSA") {
-            prompt = `
-            Generate 5 DSA interview questions
-            from easy to hard.
-            
-            Return ONLY valid JSON like this:
-
-                [
-                {
-                "type":"technical",
-                "question":"Explain JWT authentication."
-                }
-                ]
-            `;
+        let resumeText = null;
+        if (type === 'RESUME') {
+            const resume = await Resume.findOne({ userId: req.user.id }).lean();
+            resumeText = resume?.extractedText;
         }
 
-        if (type === "MERN") {
-            prompt = `
-            Generate 5 MERN stack interview questions.
-            
-            Return ONLY valid JSON like this:
-
-                [
-                {
-                "type":"technical",
-                "question":"Explain JWT authentication."
-                }
-                ]
-            `;
-        }
-
-        if (type === "RESUME") {
-            prompt = `
-            Based on this resume:
-            ${resumeText}
-
-            Generate 5 interview questions.
-            
-            Return ONLY valid JSON like this:
-
-                [
-                {
-                "type":"technical",
-                "question":"Explain JWT authentication."
-                }
-                ]
-            `;
-        }
-
+        const prompt = buildPrompt(type, resumeText);
         const result = await model.generateContent(prompt);
-
-        const response = result.response.text();
-
-        // remove markdown if Gemini adds ```json
-        const cleanText = response
-            .replace(/```json/g, "")
-            .replace(/```/g, "")
+        const rawText = result.response.text()
+            .replace(/```json\s*/gi, '')
+            .replace(/```\s*/gi, '')
             .trim();
 
-        const questions = JSON.parse(cleanText);
+        let questions;
+        try {
+            questions = JSON.parse(rawText);
+        } catch {
+            logger.error('Gemini returned malformed JSON for question generation');
+            return res.status(502).json({ success: false, message: 'AI service returned invalid data. Please try again.' });
+        }
 
-
-        res.status(200).json({
-            success: true,
-            message: 'success',
-            questions
-        });
-
+        res.status(200).json({ success: true, questions });
     } catch (error) {
+        logger.error('generateQuestions error:', error);
         next(error);
     }
-}
+};
 
 export const evaluateAnswer = async (req, res, next) => {
-
     try {
+        const { answers, type } = req.body;
 
-        const {
-            answers,
-            type
-        } = req.body;
-
-        /*
-            answers = [
-                {
-                    question: "...",
-                    answer: "..."
-                }
-            ]
-        */
-
-        const prompt = `
-        You are an expert technical interviewer.
-
-        Evaluate each interview answer carefully.
-
-        For EACH answer provide:
-
-        - technical_correctness (score out of 10)
-        - communication_clarity (score out of 10)
-        - confidence (score out of 10)
-        - strengths
-        - weaknesses
-        - improvement_tips
-
-        Return ONLY valid JSON array.
-
-        Example format:
-
-        [
-          {
-            "question": "What is JWT?",
-            "technical_correctness": 8,
-            "communication_clarity": 7,
-            "confidence": 8,
-            "strengths": ["Good explanation"],
-            "weaknesses": ["Missed token expiry"],
-            "improvement_tips": ["Explain refresh token"]
-          }
-        ]
-
-        Candidate Answers:
-        ${JSON.stringify(answers)}
-        `;
-
-        const result = await model.generateContent(prompt);
-
-        const response = result.response.text();
-
-        const cleanText = response
-            .replace(/```json/g, "")
-            .replace(/```/g, "")
-            .trim();
-
-        const evaluations = JSON.parse(cleanText);
-
-        // SCORES
-        let technicalTotal = 0;
-        let communicationTotal = 0;
-        let confidenceTotal = 0;
-
-        evaluations.forEach((item) => {
-
-            technicalTotal += item.technical_correctness;
-
-            communicationTotal += item.communication_clarity;
-
-            confidenceTotal += item.confidence;
-        });
-
-        const totalQuestions = evaluations.length;
-
-        const technicalScore =
-            technicalTotal / totalQuestions;
-
-        const communicationScore =
-            communicationTotal / totalQuestions;
-
-        const confidenceScore =
-            confidenceTotal / totalQuestions;
-
-        const overallScore =
-            (
-                technicalScore +
-                communicationScore +
-                confidenceScore
-            ) / 3;
-
-        // OVERALL FEEDBACK
-        let overallFeedback = "";
-
-        if (overallScore >= 8) {
-
-            overallFeedback =
-                "Excellent performance. Strong technical and communication skills.";
-
-        } else if (overallScore >= 6) {
-
-            overallFeedback =
-                "Good performance with some improvement areas.";
-
-        } else {
-
-            overallFeedback =
-                "Needs improvement in technical concepts and communication.";
+        if (!Array.isArray(answers) || answers.length === 0) {
+            return res.status(400).json({ success: false, message: 'answers array is required and cannot be empty' });
         }
 
-        // SAVE INTERVIEW
+        const prompt = `You are an expert technical interviewer.
+Evaluate each interview answer carefully.
+For EACH answer provide:
+- technical_correctness (score out of 10)
+- communication_clarity (score out of 10)
+- confidence (score out of 10)
+- strengths (array of strings)
+- weaknesses (array of strings)
+- improvement_tips (array of strings)
+
+Return ONLY valid JSON array.
+Example: [{"question":"What is JWT?","technical_correctness":8,"communication_clarity":7,"confidence":8,"strengths":["Good explanation"],"weaknesses":["Missed token expiry"],"improvement_tips":["Explain refresh token"]}]
+
+Candidate Answers:
+${JSON.stringify(answers)}`;
+
+        const result = await model.generateContent(prompt);
+        const rawText = result.response.text()
+            .replace(/```json\s*/gi, '')
+            .replace(/```\s*/gi, '')
+            .trim();
+
+        let evaluations;
+        try {
+            evaluations = JSON.parse(rawText);
+        } catch {
+            logger.error('Gemini returned malformed JSON for evaluation');
+            return res.status(502).json({ success: false, message: 'AI evaluation failed. Please try again.' });
+        }
+
+        const total = evaluations.length || 1;
+        const technicalScore  = evaluations.reduce((s, i) => s + (i.technical_correctness || 0), 0) / total;
+        const communicationScore = evaluations.reduce((s, i) => s + (i.communication_clarity || 0), 0) / total;
+        const confidenceScore = evaluations.reduce((s, i) => s + (i.confidence || 0), 0) / total;
+        const overallScore = (technicalScore + communicationScore + confidenceScore) / 3;
+
+        const overallFeedback = overallScore >= 8
+            ? 'Excellent performance. Strong technical and communication skills.'
+            : overallScore >= 6
+            ? 'Good performance with some improvement areas.'
+            : 'Needs improvement in technical concepts and communication.';
+
         const savedInterview = await Interview.create({
-
             userId: req.user.id,
-
             type,
-
             score: overallScore.toFixed(1),
-
-            technicalScore:
-                technicalScore.toFixed(1),
-
-            communicationScore:
-                communicationScore.toFixed(1),
-
-            confidenceScore:
-                confidenceScore.toFixed(1),
-
+            technicalScore: technicalScore.toFixed(1),
+            communicationScore: communicationScore.toFixed(1),
+            confidenceScore: confidenceScore.toFixed(1),
             feedback: overallFeedback,
-
             questions: evaluations.map((item, index) => ({
                 question: item.question,
-                answer: answers[index].answer,
-                rating:
-                    (
-                        item.technical_correctness +
-                        item.communication_clarity +
-                        item.confidence
-                    ) / 3,
-                feedback:
-                    item.improvement_tips?.join(", ")
+                answer: answers[index]?.answer || '',
+                rating: ((item.technical_correctness + item.communication_clarity + item.confidence) / 3).toFixed(1),
+                feedback: item.improvement_tips?.join(', ') || ''
             }))
         });
 
@@ -257,164 +126,39 @@ export const evaluateAnswer = async (req, res, next) => {
             success: true,
             evaluations,
             overallScore: overallScore.toFixed(1),
-            technicalScore:
-                technicalScore.toFixed(1),
-            communicationScore:
-                communicationScore.toFixed(1),
-            confidenceScore:
-                confidenceScore.toFixed(1),
+            technicalScore: technicalScore.toFixed(1),
+            communicationScore: communicationScore.toFixed(1),
+            confidenceScore: confidenceScore.toFixed(1),
             feedback: overallFeedback,
             interview: savedInterview
         });
-
     } catch (error) {
-
+        logger.error('evaluateAnswer error:', error);
         next(error);
     }
 };
 
 export const getInterviewHistory = async (req, res, next) => {
-
     try {
+        const page = Math.max(1, parseInt(req.query.page) || 1);
+        const limit = Math.min(50, parseInt(req.query.limit) || 10);
+        const skip = (page - 1) * limit;
 
-        const interviews = await Interview.find({
-            userId: req.user.id
-        }).sort({ createdAt: -1 });
+        const [interviews, total] = await Promise.all([
+            Interview.find({ userId: req.user.id })
+                .sort({ createdAt: -1 })
+                .skip(skip)
+                .limit(limit)
+                .lean(),
+            Interview.countDocuments({ userId: req.user.id })
+        ]);
 
         res.status(200).json({
             success: true,
-            interviews
+            interviews,
+            pagination: { page, limit, total, pages: Math.ceil(total / limit) }
         });
-
     } catch (error) {
-
         next(error);
     }
 };
-
-// export const evaluateAnswer = async (req, res, next) => {
-//     try {
-
-//         const { question, answer } = req.body;
-
-//         const prompt = `
-//             You are an expert technical interviewer.
-
-//             Question:
-//             ${question}
-
-//             Candidate Answer:
-//             ${answer}
-
-//             Evaluate:
-
-//             1. Technical_correctness (/10)
-//             2. Communication_clarity (/10)
-//             3. Confidence (/10)
-
-//             Also provide:
-//             - strengths
-//             - weaknesses
-//             - improvement_tips
-
-//             Return ONLY valid JSON.
-//             `;
-
-//         const result = await model.generateContent(prompt);
-
-//         const response = result.response.text();
-
-//         const cleanText = response
-//             .replace(/```json/g, "")
-//             .replace(/```/g, "")
-//             .trim();
-
-//         const evaluation = JSON.parse(cleanText);
-
-//         res.status(200).json(evaluation);
-
-//     } catch (error) {
-//         next(error);
-//     }
-// }
-
-
-// export const evaluateAnswer = async (req, res, next) => {
-//     try {
-
-//         const { answers } = req.body;
-
-//         /*
-//             answers = [
-//                 {
-//                     question: "...",
-//                     answer: "..."
-//                 }
-//             ]
-//         */
-
-//         const prompt = `
-//         You are an expert technical interviewer.
-
-//         Evaluate each interview answer carefully.
-
-//         For EACH answer provide:
-
-//         - technical_correctness (score out of 10)
-//         - communication_clarity (score out of 10)
-//         - confidence (score out of 10)
-//         - strengths
-//         - weaknesses
-//         - improvement_tips
-
-//         Return ONLY valid JSON array.
-
-//         Example format:
-
-//         [
-//           {
-//             "question": "What is JWT?",
-//             "technical_correctness": 8,
-//             "communication_clarity": 7,
-//             "confidence": 8,
-//             "strengths": ["Good explanation"],
-//             "weaknesses": ["Missed token expiry"],
-//             "improvement_tips": ["Explain refresh token"]
-//           }
-//         ]
-
-//         Here are the candidate answers:
-
-//         ${JSON.stringify(answers)}
-//         `;
-
-//         const result = await model.generateContent(prompt);
-
-//         const response = result.response.text();
-
-//         const cleanText = response
-//             .replace(/```json/g, "")
-//             .replace(/```/g, "")
-//             .trim();
-
-//         const evaluations = JSON.parse(cleanText);
-
-//         // overall score calculation
-//         const overallScore =
-//             evaluations.reduce((acc, item) => {
-//                 return acc +
-//                     item.technical_correctness +
-//                     item.communication_clarity +
-//                     item.confidence;
-//             }, 0) / (evaluations.length * 3);
-
-//         res.status(200).json({
-//             success: true,
-//             evaluations,
-//             overallScore: overallScore.toFixed(1)
-//         });
-
-//     } catch (error) {
-//         next(error);
-//     }
-// };

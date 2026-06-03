@@ -6,10 +6,9 @@ export const getProfile = async () => {
 };
 
 export const updateProfile = async (userId, formData) => {
-    const response = await API.put(
+    const response = await API.patch(
         `/user/profile/${userId}`,
         formData
     );
-
     return response.data;
 };

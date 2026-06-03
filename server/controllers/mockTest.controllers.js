@@ -2,133 +2,114 @@ import mongoose from 'mongoose';
 import MockTest from '../models/mockTest.model.js';
 import Result from '../models/result.model.js';
 
-export const createMockTest = async (req, res, next)=>{
+export const createMockTest = async (req, res, next) => {
+    if (!req.user?.isAdmin) {
+        return res.status(403).json({ success: false, message: 'Only admins can create mock tests' });
+    }
+
     const { title, category, questions, timeLimit } = req.body;
 
-    if(!req.user.isAdmin){
-        return next({statusCode: 403, message: "You are not authorized !!!"});
-    };
-    if(!title || !category || !questions || questions.length === 0 || !timeLimit){
-        return next({statusCode: 400, message: "Please provide all details"});
-    };
+    if (!title || !category || !Array.isArray(questions) || questions.length === 0 || !timeLimit) {
+        return res.status(400).json({ success: false, message: 'Please provide title, category, questions, and timeLimit' });
+    }
 
-   try {
-    const mocktest = await MockTest.create({
-        title,
-        category,
-        questions,
-        timeLimit
-    });
-    res.status(201).json({
-        success: true,
-        message: "mocktest created successfully",
-        mocktest
-    });
-   } catch (error) {
-    next(error)
-   };
+    try {
+        const mocktest = await MockTest.create({ title, category, questions, timeLimit });
+        res.status(201).json({ success: true, message: 'Mock test created successfully', mocktest });
+    } catch (error) {
+        next(error);
+    }
 };
 
 export const getAllMockTest = async (req, res, next) => {
-    if(!req.user){
-        return next({statusCode: 403, message: "Please Login, You are not authorized !!!"});
-    };
     try {
-        const mockTest = await MockTest.find()
-        .select("-questions.correctAnswer")
-        .lean();
+        const page = Math.max(1, parseInt(req.query.page) || 1);
+        const limit = Math.min(50, parseInt(req.query.limit) || 10);
+        const skip = (page - 1) * limit;
+
+        const [mockTests, total] = await Promise.all([
+            MockTest.find()
+                .select('-questions.correctAnswer')
+                .sort({ createdAt: -1 })
+                .skip(skip)
+                .limit(limit)
+                .lean(),
+            MockTest.countDocuments()
+        ]);
+
         res.status(200).json({
             success: true,
-            message: "All mockTest",
-            totalMockTest: mockTest.length,
-            mockTest
-        })
+            totalMockTest: total,
+            mockTest: mockTests,
+            pagination: { page, limit, total, pages: Math.ceil(total / limit) }
+        });
     } catch (error) {
-        next(error)
+        next(error);
     }
 };
 
 export const getMockTestbyId = async (req, res, next) => {
-    const mockTestId = req.params.id;
+    const { id } = req.params;
 
-    if(!req.user){
-        return next({statusCode: 403, message: "You are not authorized !!!"});
-    };
-
-    if(!mongoose.Types.ObjectId.isValid(mockTestId)){
-        return next({statusCode: 400, message: "Invalid mocktest Id"});
-    };
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+        return res.status(400).json({ success: false, message: 'Invalid mock test ID' });
+    }
 
     try {
-        const mocktest = await MockTest.findById(mockTestId)
-        .select("-questions.correctAnswer")
-        .lean();
+        const mocktest = await MockTest.findById(id)
+            .select('-questions.correctAnswer')
+            .lean();
 
-        if(!mocktest){
-            return next({statusCode: 403, message: "MockTest Not Found"});
-        };
+        if (!mocktest) {
+            return res.status(404).json({ success: false, message: 'Mock test not found' });
+        }
 
-        res.status(200).json({
-            success: true,
-            message: "success",
-            mocktest
-        });
+        res.status(200).json({ success: true, mocktest });
     } catch (error) {
-        next(error)
+        next(error);
     }
 };
 
 export const submitMockTest = async (req, res, next) => {
-    const mockTestId = req.params.id;
+    const { id } = req.params;
     const { answers } = req.body;
 
-    if(!req.user){
-        return next({statusCode: 403, message: "You are not authorized !!!"});
-    };
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+        return res.status(400).json({ success: false, message: 'Invalid mock test ID' });
+    }
 
-    if(!mongoose.Types.ObjectId.isValid(mockTestId)){
-        return next({statusCode: 403, message: "Invalid mocktest Id"});
-    };
+    if (!Array.isArray(answers) || answers.length === 0) {
+        return res.status(400).json({ success: false, message: 'answers array is required' });
+    }
 
     try {
-        const mockTest = await MockTest.findById(mockTestId);
+        const mockTest = await MockTest.findById(id);
+        if (!mockTest) {
+            return res.status(404).json({ success: false, message: 'Mock test not found' });
+        }
 
         let score = 0;
-
-        const resultAnswers = [];
-
-        mockTest.questions.forEach((question)=>{
-            const userAnswer = answers.find((ans)=> ans.questionId === question._id.toString());
-
+        const resultAnswers = mockTest.questions.map(question => {
+            const userAnswer = answers.find(a => a.questionId === question._id.toString());
             const isCorrect = userAnswer?.selectedAnswer === question.correctAnswer;
-
-            if(isCorrect) {
-                score ++;
-            };
-
-            resultAnswers.push({
+            if (isCorrect) score++;
+            return {
                 questionId: question._id,
-                selectedAnswer: userAnswer?.selectedAnswer || "",
+                selectedAnswer: userAnswer?.selectedAnswer || '',
                 correctAnswer: question.correctAnswer
-            });
-
+            };
         });
 
-        // saving result
         const result = await Result.create({
             userId: req.user.id,
-            testId: mockTestId,
+            testId: id,
             score,
             totalQuestion: mockTest.questions.length,
             answers: resultAnswers
         });
 
-        res.status(200).json({
-            success: true,
-            message: "MockTest Submitted Successfully",
-            result
-        })
+        res.status(200).json({ success: true, message: 'Mock test submitted successfully', result });
     } catch (error) {
-        next(error)
+        next(error);
     }
 };

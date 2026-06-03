@@ -2,104 +2,70 @@ import mongoose from "mongoose";
 import Result from "../models/result.model.js";
 
 export const getUserResults = async (req, res, next) => {
-    if(!req.user){
-        return next({statusCode: 403, message: "You are not authorized !!!"});
-    };
-
     try {
-        const results = await Result.find({
-            userId: req.user.id
-        }).populate("testId", "title category")
-        .lean();
+        const page = Math.max(1, parseInt(req.query.page) || 1);
+        const limit = Math.min(50, parseInt(req.query.limit) || 10);
+        const skip = (page - 1) * limit;
+
+        const [results, total] = await Promise.all([
+            Result.find({ userId: req.user.id })
+                .populate('testId', 'title category')
+                .sort({ createdAt: -1 })
+                .skip(skip)
+                .limit(limit)
+                .lean(),
+            Result.countDocuments({ userId: req.user.id })
+        ]);
 
         res.status(200).json({
             success: true,
-            message: "Success",
-            totalResults: results.length,
-            results
-        })
+            totalResults: total,
+            results,
+            pagination: { page, limit, total, pages: Math.ceil(total / limit) }
+        });
     } catch (error) {
         next(error);
     }
 };
 
 export const getResultById = async (req, res, next) => {
-    const resultId = req.params.id;
+    const { id } = req.params;
 
-    if(!req.user){
-        return next({statusCode: 403, message: "You are not authorized !!!"});
-    };
-
-    if(!mongoose.Types.ObjectId.isValid(resultId)){
-        return next({statusCode: 400, message: "Invalid mocktest Id"});
-    };
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+        return res.status(400).json({ success: false, message: 'Invalid result ID' });
+    }
 
     try {
-        const result = await Result.findOne({
-            _id: resultId,
-            userId: req.user.id
-        })
-        .populate("testId", "title category")
-        .lean();
+        const result = await Result.findOne({ _id: id, userId: req.user.id })
+            .populate('testId', 'title category')
+            .lean();
 
-        if(!result){
-            return next({statusCode: 404, message: "Result not found"})
+        if (!result) {
+            return res.status(404).json({ success: false, message: 'Result not found' });
         }
 
-        res.status(200).json({
-            success:true,
-            message: "success",
-            result
-        })
+        res.status(200).json({ success: true, result });
     } catch (error) {
         next(error);
     }
 };
 
 export const getResultsAnalytics = async (req, res, next) => {
-
     try {
-
-        const results = await Result.find({
-            userId: req.user.id
-        });
+        const results = await Result.find({ userId: req.user.id }).lean();
 
         const totalTests = results.length;
-
-        const totalScore = results.reduce(
-            (acc, curr) => acc + curr.score,
-            0
-        );
-
-        const totalQuestions = results.reduce(
-            (acc, curr) => acc + curr.totalQuestion,
-            0
-        );
-
-        const averageScore = totalTests
-            ? (totalScore / totalTests).toFixed(1)
-            : 0;
-
-        const percentage = totalQuestions
-            ? ((totalScore / totalQuestions) * 100).toFixed(1)
-            : 0;
-
-        const highestScore = results.length
-            ? Math.max(...results.map(r => r.score))
-            : 0;
+        const totalScore = results.reduce((acc, r) => acc + r.score, 0);
+        const totalQuestions = results.reduce((acc, r) => acc + r.totalQuestion, 0);
+        const averageScore = totalTests ? (totalScore / totalTests).toFixed(1) : 0;
+        const percentage = totalQuestions ? ((totalScore / totalQuestions) * 100).toFixed(1) : 0;
+        const highestScore = results.length ? Math.max(...results.map(r => r.score)) : 0;
 
         res.status(200).json({
             success: true,
-            analytics: {
-                totalTests,
-                averageScore,
-                highestScore,
-                percentage
-            }
+            analytics: { totalTests, averageScore, highestScore, percentage }
         });
-
     } catch (error) {
-
         next(error);
     }
 };

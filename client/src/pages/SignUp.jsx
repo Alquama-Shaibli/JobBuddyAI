@@ -73,7 +73,7 @@ const SignUp = () => {
     };
 
   return (
-    <div className='min-h-screen dark:bg-gray-950 dark:text-white'>
+    <div className='min-h-screen dark:text-white'>
         <div className="flex flex-col sm:flex-row items-center Roboto pt-20 sm:pt-32 sm:mx-20 mx-4 gap-2">
             {/* add logo here */}
             <div className=" sm:flex hidden items-center flex-col p-4 flex-1 text-xl sm:text-4xl  relative">
