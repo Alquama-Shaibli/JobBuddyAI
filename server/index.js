@@ -32,8 +32,20 @@ const PORT = process.env.PORT || 8080;
 const isProduction = process.env.NODE_ENV === 'production';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// Production static frontend path (relative to server/)
+// Resolved path to React build output
 const CLIENT_BUILD = path.join(__dirname, '..', 'client', 'dist');
+const CLIENT_INDEX = path.join(CLIENT_BUILD, 'index.html');
+
+// ── Startup Diagnostics (visible in Render logs) ───────────────
+console.log('='.repeat(60));
+console.log('JobBuddy AI — Server Starting');
+console.log(`  NODE_ENV    : ${process.env.NODE_ENV || 'development'}`);
+console.log(`  CWD         : ${process.cwd()}`);
+console.log(`  __dirname   : ${__dirname}`);
+console.log(`  CLIENT_BUILD: ${CLIENT_BUILD}`);
+console.log(`  dist exists : ${fs.existsSync(CLIENT_BUILD)}`);
+console.log(`  index.html  : ${fs.existsSync(CLIENT_INDEX)}`);
+console.log('='.repeat(60));
 
 // ── Security Headers ──────────────────────────────────────────
 app.use(helmet({
@@ -153,17 +165,38 @@ app.use('/api/v1/resume', resumeRoutes);
 app.use('/api/v1/interview', interviewRoutes);
 app.use('/api/v1/quiz', quizRoutes);
 
-// ── Serve Built Frontend in Production ───────────────────────
-if (isProduction && fs.existsSync(CLIENT_BUILD)) {
-    app.use(express.static(CLIENT_BUILD, { maxAge: '1d' }));
-    // SPA fallback — send index.html for all non-API routes
-    app.get(/^(?!\/api).*/, (_req, res) => {
-        res.sendFile(path.join(CLIENT_BUILD, 'index.html'));
+// ── Serve Built Frontend ──────────────────────────────────────
+// Not gated by isProduction — serves from client/dist whenever it exists.
+// On Render: Render's build step creates client/dist before start.
+// In local dev without a build: logs a warning and skips gracefully.
+if (fs.existsSync(CLIENT_BUILD)) {
+    // Static assets (JS, CSS, images) — cached 1 day in prod
+    app.use(express.static(CLIENT_BUILD, {
+        maxAge: isProduction ? '1d' : 0,
+        etag: true,
+    }));
+
+    // SPA fallback — app.use() works in Express 5 (app.get('*') does not)
+    // Intercepts all non-API requests and returns index.html so React Router works
+    app.use((req, res, next) => {
+        if (req.path.startsWith('/api')) return next();
+        res.sendFile(CLIENT_INDEX, (sendErr) => {
+            if (sendErr) {
+                console.error(`sendFile error: ${sendErr.message}`);
+                res.status(500).json({ success: false, message: 'Failed to load frontend.' });
+            }
+        });
     });
-    logger.info('Serving static frontend from client/dist');
+
+    console.log(`✅ React frontend served from: ${CLIENT_BUILD}`);
+} else {
+    // Build hasn't run — warn clearly so Render logs show the root cause
+    console.warn(`⚠️  client/dist NOT found at: ${CLIENT_BUILD}`);
+    console.warn('   Render build command must run "npm run build:full" before start.');
 }
 
-// ── 404 Handler (API routes only) ────────────────────────────
+// ── 404 Handler (API-only catch-all) ─────────────────────────
+// Only reached by /api/* routes that matched no handler above
 app.use((req, res) => {
     res.status(404).json({ success: false, message: `Route ${req.originalUrl} not found` });
 });
