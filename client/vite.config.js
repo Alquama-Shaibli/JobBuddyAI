@@ -23,15 +23,19 @@ export default defineConfig(({ mode }) => {
     },
 
     build: {
-      // Raise chunk warning threshold to 700 kB
       chunkSizeWarningLimit: 700,
       rollupOptions: {
         output: {
           manualChunks: {
-            // Split large vendor libs into separate chunks for better caching
+            // Split vendor libs into separate chunks for better caching.
+            // NOTE: Only include packages that are ACTUALLY imported in src/.
+            // An empty manualChunk (package not used) produces a 1-byte JS
+            // file that silently breaks ES module graph loading → white screen.
             'vendor-react': ['react', 'react-dom', 'react-router-dom'],
-            'vendor-ui': ['react-toastify', 'react-icons', 'react-markdown'],
-            'vendor-motion': ['motion'],
+            'vendor-ui':    ['react-toastify', 'react-icons', 'react-markdown'],
+            // 'motion' removed — not imported anywhere in the codebase.
+            // It produced vendor-motion-*.js (1 byte, empty) which caused
+            // browser ES module graph failures → blank white screen.
           },
         },
       },
