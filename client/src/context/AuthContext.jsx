@@ -3,15 +3,46 @@ import { useNavigate } from "react-router-dom";
 
 const AuthContext = createContext();
 
+/* ── Safe localStorage helpers ──────────────────────────────────
+   JSON.parse on corrupted/invalid localStorage data throws a
+   SyntaxError that crashes the entire React tree during state
+   initialization — producing a white screen.
+   These helpers swallow parse errors gracefully.
+──────────────────────────────────────────────────────────────── */
+const safeGetUser = () => {
+    try {
+        const raw = localStorage.getItem("jobbuddy_user");
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        // Validate minimal shape — must be an object with an _id
+        if (!parsed || typeof parsed !== "object" || !parsed._id) {
+            localStorage.removeItem("jobbuddy_user");
+            return null;
+        }
+        return parsed;
+    } catch {
+        // Corrupted JSON — clear it so it doesn't keep crashing
+        localStorage.removeItem("jobbuddy_user");
+        return null;
+    }
+};
+
+const safeSetUser = (userData) => {
+    try {
+        localStorage.setItem("jobbuddy_user", JSON.stringify(userData));
+    } catch {
+        // localStorage quota exceeded or disabled — fail silently
+    }
+};
+
 export const AuthProvider = ({ children }) => {
-    const [currentUser, setCurrentUser] = useState(
-        JSON.parse(localStorage.getItem("jobbuddy_user")) || null
-    );
+    const [currentUser, setCurrentUser] = useState(() => safeGetUser());
     const [loading, setLoading] = useState(true);
     const navigate = useNavigate();
 
     useEffect(() => {
-        const storedUser = JSON.parse(localStorage.getItem("jobbuddy_user"));
+        // Re-read from localStorage on mount (handles page refresh)
+        const storedUser = safeGetUser();
         if (storedUser) {
             setCurrentUser(storedUser);
         }
@@ -20,14 +51,14 @@ export const AuthProvider = ({ children }) => {
 
     const login = (userData) => {
         setCurrentUser(userData);
-        localStorage.setItem("jobbuddy_user", JSON.stringify(userData));
+        safeSetUser(userData);
     };
 
-    // Call this after onboarding completes so the global state reflects isOnboarded:true
+    // Call this after onboarding completes so global state reflects isOnboarded:true
     const updateUser = (updatedUserData) => {
         const merged = { ...currentUser, ...updatedUserData };
         setCurrentUser(merged);
-        localStorage.setItem("jobbuddy_user", JSON.stringify(merged));
+        safeSetUser(merged);
     };
 
     const logout = () => {
