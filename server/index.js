@@ -30,21 +30,36 @@ connectDb();
 const app = express();
 const PORT = process.env.PORT || 8080;
 const isProduction = process.env.NODE_ENV === 'production';
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const __filename = fileURLToPath(import.meta.url);
+const __dirname  = path.dirname(__filename);
 
-// Resolved path to React build output
-const CLIENT_BUILD = path.join(__dirname, '..', 'client', 'dist');
-const CLIENT_INDEX = path.join(CLIENT_BUILD, 'index.html');
+// ── Trust Proxy ───────────────────────────────────────────────
+// MUST be set before rate-limiters.
+// Fixes ERR_ERL_UNEXPECTED_X_FORWARDED_FOR on Render (sits behind a proxy).
+app.set('trust proxy', 1);
 
-// ── Startup Diagnostics (visible in Render logs) ───────────────
+// ── Path Resolution ───────────────────────────────────────────
+// start:prod = 'node server/index.js' (run from repo root)
+//   process.cwd() → /opt/render/project/src/
+//   __dirname     → /opt/render/project/src/server/
+// Both candidates resolve to the same location.
+// We check both so Render logs reveal exactly where the build landed.
+const BUILD_FROM_CWD = path.join(process.cwd(), 'client', 'dist');
+const BUILD_FROM_DIR = path.join(__dirname, '..', 'client', 'dist');
+const CLIENT_BUILD   = fs.existsSync(BUILD_FROM_CWD) ? BUILD_FROM_CWD : BUILD_FROM_DIR;
+const CLIENT_INDEX   = path.join(CLIENT_BUILD, 'index.html');
+
+// ── Startup Diagnostics (visible in Render logs) ──────────────
 console.log('='.repeat(60));
 console.log('JobBuddy AI — Server Starting');
-console.log(`  NODE_ENV    : ${process.env.NODE_ENV || 'development'}`);
-console.log(`  CWD         : ${process.cwd()}`);
-console.log(`  __dirname   : ${__dirname}`);
-console.log(`  CLIENT_BUILD: ${CLIENT_BUILD}`);
-console.log(`  dist exists : ${fs.existsSync(CLIENT_BUILD)}`);
-console.log(`  index.html  : ${fs.existsSync(CLIENT_INDEX)}`);
+console.log(`  NODE_ENV      : ${process.env.NODE_ENV || 'development'}`);
+console.log(`  CWD           : ${process.cwd()}`);
+console.log(`  __dirname     : ${__dirname}`);
+console.log(`  BUILD_FROM_CWD: ${BUILD_FROM_CWD}  [${fs.existsSync(BUILD_FROM_CWD) ? 'FOUND ✅' : 'NOT FOUND ❌'}]`);
+console.log(`  BUILD_FROM_DIR: ${BUILD_FROM_DIR}  [${fs.existsSync(BUILD_FROM_DIR) ? 'FOUND ✅' : 'NOT FOUND ❌'}]`);
+console.log(`  CLIENT_BUILD  : ${CLIENT_BUILD}`);
+console.log(`  dist exists   : ${fs.existsSync(CLIENT_BUILD)}`);
+console.log(`  index.html    : ${fs.existsSync(CLIENT_INDEX)}`);
 console.log('='.repeat(60));
 
 // ── Security Headers ──────────────────────────────────────────
@@ -53,11 +68,8 @@ app.use(helmet({
 }));
 
 // ── CORS ──────────────────────────────────────────────────────
-// In full-stack mode (Option 2), the frontend is served by this
-// same Express server — browser never sends a cross-origin request,
-// so CORS is effectively not needed. We still configure it for:
-//   1. Local dev (frontend on :5173, server on :8080)
-//   2. Split deploy (Vercel frontend + Render backend)
+// In full-stack mode, frontend is served by the same Express server.
+// Browser never sends cross-origin requests — CORS is for local dev only.
 const rawOrigins = process.env.ALLOWED_ORIGINS || '';
 const allowedOrigins = rawOrigins
     ? rawOrigins.split(',').map(o => o.trim())
@@ -65,18 +77,15 @@ const allowedOrigins = rawOrigins
 
 app.use(cors({
     origin: (origin, callback) => {
-        // Allow same-origin requests (no Origin header) and preflight
         if (!origin) return callback(null, true);
-        // Allow explicitly listed origins
         if (allowedOrigins.includes(origin)) return callback(null, true);
-        // In production full-stack mode, browser never sends cross-origin
-        // requests — all traffic is same-origin. Reject everything else.
         callback(new Error(`CORS blocked: ${origin}`));
     },
     credentials: true,
 }));
 
 // ── Rate Limiters ─────────────────────────────────────────────
+// trust proxy is set above so X-Forwarded-For is trusted correctly
 const globalLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 300,
@@ -166,18 +175,16 @@ app.use('/api/v1/interview', interviewRoutes);
 app.use('/api/v1/quiz', quizRoutes);
 
 // ── Serve Built Frontend ──────────────────────────────────────
-// Not gated by isProduction — serves from client/dist whenever it exists.
-// On Render: Render's build step creates client/dist before start.
-// In local dev without a build: logs a warning and skips gracefully.
+// Always attempts to serve — no isProduction gate so it works in any env.
 if (fs.existsSync(CLIENT_BUILD)) {
-    // Static assets (JS, CSS, images) — cached 1 day in prod
+    // Static assets — 1-day cache in production
     app.use(express.static(CLIENT_BUILD, {
         maxAge: isProduction ? '1d' : 0,
         etag: true,
     }));
 
-    // SPA fallback — app.use() works in Express 5 (app.get('*') does not)
-    // Intercepts all non-API requests and returns index.html so React Router works
+    // SPA fallback — app.use() is required in Express 5 (app.get('*') is unsupported)
+    // Intercepts all non-API requests and returns index.html for React Router
     app.use((req, res, next) => {
         if (req.path.startsWith('/api')) return next();
         res.sendFile(CLIENT_INDEX, (sendErr) => {
@@ -190,9 +197,8 @@ if (fs.existsSync(CLIENT_BUILD)) {
 
     console.log(`✅ React frontend served from: ${CLIENT_BUILD}`);
 } else {
-    // Build hasn't run — warn clearly so Render logs show the root cause
     console.warn(`⚠️  client/dist NOT found at: ${CLIENT_BUILD}`);
-    console.warn('   Render build command must run "npm run build:full" before start.');
+    console.warn('   Build command must run "npm run build:full" before starting the server.');
 }
 
 // ── 404 Handler (API-only catch-all) ─────────────────────────
