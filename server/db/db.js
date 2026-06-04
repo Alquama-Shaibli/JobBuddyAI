@@ -1,11 +1,10 @@
 import mongoose from 'mongoose';
 import logger from '../utils/logger.js';
 
-/* ── Max retry attempts before hard exit ── */
-const MAX_RETRIES = 3;
+const MAX_RETRIES    = 3;
 const RETRY_DELAY_MS = 3000;
 
-/* ── Validate required env vars at startup ── */
+/* ── Validate required env vars ── */
 const validateEnv = () => {
     const missing = [];
     if (!process.env.MONGO_URI)  missing.push('MONGO_URI');
@@ -13,92 +12,70 @@ const validateEnv = () => {
     if (!process.env.JWT_SECRET) missing.push('JWT_SECRET');
 
     if (missing.length > 0) {
-        logger.error(`❌ Missing required environment variables: ${missing.join(', ')}`);
-        logger.error('Set these in your Render dashboard under Environment → Environment Variables');
-        process.exit(1);
+        // Use console.error so this is ALWAYS visible on Render/cloud hosts
+        console.error(`[DB] ❌ MISSING env vars: ${missing.join(', ')}`);
+        console.error('[DB]    → Set these in your Render dashboard → Environment Variables');
+        // Throw instead of process.exit so the caller can catch and handle
+        throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
     }
 };
 
-/* ── Connect with retry logic ── */
+/* ── Connect with retry ── */
 const connectWithRetry = async (attempt = 1) => {
-    logger.info(`🔌 MongoDB connection attempt ${attempt}/${MAX_RETRIES}...`);
-    logger.info(`📡 Host: ${process.env.MONGO_URI?.split('@')[1]?.split('/')[0] || 'unknown'}`);
-    logger.info(`🗄  Database: ${process.env.DB_NAME}`);
+    console.log(`[DB] Connection attempt ${attempt}/${MAX_RETRIES}…`);
 
     try {
         await mongoose.connect(process.env.MONGO_URI, {
-            // Pass DB name as option — avoids URL mutation bugs with Atlas SRV strings
-            dbName: process.env.DB_NAME,
-
-            // Atlas-optimised timeouts
-            serverSelectionTimeoutMS: 10000,   // Give up selecting a server after 10s
-            socketTimeoutMS:          45000,   // Close idle sockets after 45s
-            connectTimeoutMS:         10000,   // TCP connect timeout
-            heartbeatFrequencyMS:     10000,   // How often driver checks server health
-
-            // Connection pool
-            maxPoolSize: 10,
-            minPoolSize: 2,
-
-            // Retry on initial connection
-            retryWrites: true,
-            retryReads:  true,
+            dbName:                    process.env.DB_NAME,
+            serverSelectionTimeoutMS:  10000,
+            socketTimeoutMS:           45000,
+            connectTimeoutMS:          10000,
+            heartbeatFrequencyMS:      10000,
+            maxPoolSize:               10,
+            minPoolSize:               2,
+            retryWrites:               true,
+            retryReads:                true,
         });
 
-        const host = mongoose.connection.host;
-        logger.info(`✅ MongoDB connected → ${host} / ${process.env.DB_NAME}`);
+        logger.info(`✅ MongoDB connected → ${mongoose.connection.host} / ${process.env.DB_NAME}`);
 
     } catch (error) {
-        logger.error(`❌ MongoDB connection attempt ${attempt} failed: ${error.message}`);
+        console.error(`[DB] Attempt ${attempt} failed: ${error.message}`);
 
-        // Diagnose common Atlas issues
-        if (error.message.includes('ENOTFOUND')) {
-            logger.error('   → DNS resolution failed. Check that MONGO_URI is a valid Atlas SRV string.');
-        }
-        if (error.message.includes('Authentication failed')) {
-            logger.error('   → Wrong username or password in MONGO_URI.');
-        }
-        if (error.message.includes('IP')) {
-            logger.error('   → IP not whitelisted. In Atlas → Network Access → add 0.0.0.0/0');
-        }
-        if (error.message.includes('SSL') || error.message.includes('TLS')) {
-            logger.error('   → TLS/SSL error. Ensure MONGO_URI uses mongodb+srv:// scheme.');
-        }
+        // Surface common Atlas issues
+        if (error.message.includes('ENOTFOUND'))
+            console.error('[DB]   → DNS failed. Verify MONGO_URI is a valid Atlas SRV string.');
+        if (error.message.includes('Authentication failed'))
+            console.error('[DB]   → Wrong username or password in MONGO_URI.');
+        if (error.message.includes('IP') || error.message.includes('whitelist'))
+            console.error('[DB]   → IP not whitelisted. Atlas → Network Access → add 0.0.0.0/0');
+        if (error.message.includes('SSL') || error.message.includes('TLS'))
+            console.error('[DB]   → TLS error. Ensure MONGO_URI uses mongodb+srv:// scheme.');
 
         if (attempt < MAX_RETRIES) {
-            logger.warn(`⏳ Retrying in ${RETRY_DELAY_MS / 1000}s...`);
+            console.log(`[DB] Retrying in ${RETRY_DELAY_MS / 1000}s…`);
             await new Promise(res => setTimeout(res, RETRY_DELAY_MS));
             return connectWithRetry(attempt + 1);
         }
 
-        logger.error(`💀 MongoDB connection failed after ${MAX_RETRIES} attempts. Exiting.`);
-        process.exit(1);
+        // Throw instead of process.exit — let server/index.js decide what to do
+        throw new Error(`MongoDB connection failed after ${MAX_RETRIES} attempts: ${error.message}`);
     }
 };
 
 /* ── Main export ── */
 const connectDb = async () => {
-    validateEnv();
+    validateEnv(); // throws if missing — caught by server/index.js
 
-    // Mask credentials before logging URI
-    const safeUri = process.env.MONGO_URI.replace(/:\/\/[^@]+@/, '://***:***@');
-    logger.info(`🍃 MONGO_URI detected: ${safeUri}`);
-    logger.info('🔄 Attempting MongoDB Atlas connection...');
+    const safeUri = process.env.MONGO_URI.replace(/(:\/\/[^:]+:)[^@]+(@)/, '$1***$2');
+    console.log(`[DB] URI: ${safeUri}`);
+    console.log(`[DB] DB : ${process.env.DB_NAME}`);
 
     await connectWithRetry();
 
-    // Handle post-connect events
-    mongoose.connection.on('disconnected', () => {
-        logger.warn('⚡ MongoDB disconnected. Driver will auto-reconnect.');
-    });
-
-    mongoose.connection.on('error', (err) => {
-        logger.error(`⚡ MongoDB runtime error: ${err.message}`);
-    });
-
-    mongoose.connection.on('reconnected', () => {
-        logger.info('✅ MongoDB reconnected successfully.');
-    });
+    mongoose.connection.on('disconnected', () => logger.warn('⚡ MongoDB disconnected — driver will reconnect'));
+    mongoose.connection.on('error',        (e) => logger.error(`⚡ MongoDB error: ${e.message}`));
+    mongoose.connection.on('reconnected',  () => logger.info('✅ MongoDB reconnected'));
 };
 
 export default connectDb;
